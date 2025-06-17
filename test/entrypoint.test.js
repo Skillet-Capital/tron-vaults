@@ -31,10 +31,11 @@ contract("EntryPoint", async (accounts) => {
   let entrypoint;
 
   let owner;
+  let feeRecipient;
   let relayer;
 
   before(async () => {
-    [owner, relayer] = accounts;
+    [owner, feeRecipient, relayer] = accounts;
     token = await TRC20.new();
     factory = await VaultFactory.new();
     entrypoint = await EntryPoint.new(factory.address);
@@ -49,13 +50,16 @@ contract("EntryPoint", async (accounts) => {
     // sign the send transaction
     const nonce = 0; // Vault not deployed yet
     const deadline = getEpoch() + 1000;
+    const fee = TronWeb.toSun(1);
 
     const hash = ethers.solidityPackedKeccak256(
-      ["address", "address", "uint256", "uint256", "uint256"],
+      ["address", "address", "uint256", "address", "uint256", "uint256", "uint256"],
       [
         toEthAddress(token.address),
         toEthAddress(base58ToHexAddr(owner)),
         balance,
+        toEthAddress(base58ToHexAddr(feeRecipient)),
+        fee,
         deadline,
         nonce
       ]
@@ -71,6 +75,8 @@ contract("EntryPoint", async (accounts) => {
       toEthAddress(token.address),
       toEthAddress(base58ToHexAddr(owner)),
       balance,
+      toEthAddress(base58ToHexAddr(feeRecipient)),
+      fee,
       deadline,
       sig,
       {
@@ -81,7 +87,8 @@ contract("EntryPoint", async (accounts) => {
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     assert.equal(await token.balanceOf(vaultAddress), 0, "Vault Balance not transferred");
-    assert.equal(await token.balanceOf(owner), balance, "Owner Balance not transferred");
+    assert.equal(await token.balanceOf(owner), BigInt(balance) - BigInt(fee), "Owner Balance not transferred");
+    assert.equal(await token.balanceOf(feeRecipient), BigInt(fee), "Fee recipient balance not transferred");
 
     const vault = await Vault.at(vaultAddress);
     assert.equal(await vault.nonce(), 1n, "Nonce not incremented");

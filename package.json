@@ -1,0 +1,19 @@
+{
+  "name": "tron-vaults",
+  "version": "1.0.0",
+  "description": "This is a bare-minimum TronBox project.",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "tronbox-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "ethers": "^6.14.4",
+    "tronweb": "^6.0.3"
+  }
+}

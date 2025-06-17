@@ -1,82 +1,171 @@
-# Sample TronBox Project
+# 🔐 TRON Vault Relayer System
 
-This is a bare-minimum TronBox project.
+This repository implements a smart contract system for relayed TRC20 token transfers via deterministic vaults, deployable using `CREATE2` on the TRON blockchain. It includes:
 
-## Configuration
+* **`Vault`**: Minimal, signature-authorized token vault.
+* **`VaultFactory`**: Deterministic `CREATE2` deployer with nonce support.
+* **`EntryPoint`**: Meta-transaction relayer that deploys vaults on demand and forwards signed calls.
 
-Your configuration file is called `tronbox-config.js` and is located at the root of your project directory.
+---
 
-## Compiling
+## 📆 Contracts Overview
 
-To compile your contracts, use the following command:
+### `Vault`
 
-```shell
+* Ownable TRC20 vault.
+* Supports gasless `send()` transfers with EIP-191-style signatures.
+* Nonce-protected to prevent replay attacks.
+* Constructor-locked and immutable owner.
+
+### `VaultFactory`
+
+* Deploys `Vault` contracts deterministically using `CREATE2`.
+* Tracks nonces per user to avoid collisions.
+* Verifiable vault computation via `computeAddress()`.
+
+### `EntryPoint`
+
+* Acts as a trusted relayer.
+* Automatically deploys a user’s vault if not yet deployed.
+* Emits `MetaTransactionExecuted` after forwarding a `send()`.
+
+---
+
+## 🛠 Installation
+
+```bash
+git clone https://github.com/yourname/vault-relayer-tron.git
+cd vault-relayer-tron
+npm install
+```
+
+> Requires Node.js, TronBox, and `solc` 0.8.20 compatible compiler.
+
+---
+
+## 🔐 Environment Setup
+
+Create a `.env` file:
+
+```dotenv
+PRIVATE_KEY_MAINNET=your_private_key_here
+```
+
+Ensure it's ignored:
+
+```bash
+echo ".env" >> .gitignore
+```
+
+---
+
+## 🚀 Deployment
+
+### Compile
+
+```bash
 tronbox compile
 ```
 
-## Migration
+### Local Deployment
 
-The project comes pre-configured with four separate networks:
-
-- Mainnet (https://api.trongrid.io)
-- Shasta Testnet (https://api.shasta.trongrid.io)
-- Nile Testnet (https://nile.trongrid.io).
-- Localnet (http://127.0.0.1:9090)
-
-### Mainnet
-
-To deploy your contracts to Mainnet, you can run the following:
-
-```shell
-tronbox migrate --network mainnet
+```bash
+tronbox migrate --network development
 ```
 
-### Shasta Testnet
+### Mainnet Deployment
 
-Obtain test coin at https://shasta.tronex.io/
-
-To deploy your contracts to Shasta Testnet, you can run the following:
-
-```shell
-tronbox migrate --network shasta
+```bash
+source .env && tronbox migrate --network mainnet
 ```
 
-### Nile Testnet
+Ensure `.env` has sufficient TRX staked or balance.
 
-Obtain test coin at https://nileex.io/join/getJoinPage
+---
 
-To deploy your contracts to Nile Testnet, you can run the following:
+## 📏 Energy Estimation
 
-```shell
-tronbox migrate --network nile
+Use [this script](#) or estimate manually:
+
+* Contract size: \~9 KB
+* Estimated Energy: \~1.5–2M
+* TRX Cost: \~650–900 TRX without staking
+* **Tip**: Stake TRX for free energy instead of paying per deployment.
+
+---
+
+## 💫 Staking for Energy
+
+* **Stake TRX** to gain free daily energy and bandwidth.
+* Use [TronLink](https://www.tronlink.org/) or TronGrid’s [freeze interface](https://tronscan.org/#/wallet/resources).
+* **1000 TRX** staked ≈ enough to cover 1–2 deployments/day depending on size.
+
+---
+
+## ⚙️ Scripts
+
+### Estimate Deployment Energy
+
+```bash
+node scripts/estimate.js
 ```
 
-### Localnet
+Includes:
 
-The TronBox Runtime Environment provides a complete development framework for Tron, including a private network for testing.
+* Bytecode-based cost
+* TRX calculation
+* Account energy status
 
-Get tronbox/tre docker image at https://hub.docker.com/r/tronbox/tre
+---
 
-To deploy your contracts to Localnet, you can run the following:
+## 📜 Verifying Contracts
 
-```shell
-tronbox migrate
+While TRON doesn't support automatic Etherscan-style verification, you can:
+
+1. Flatten contracts manually.
+2. Upload bytecode and ABI to Tronscan or call `getContract` via API.
+3. For external users, expose your contract source via GitHub or IPFS.
+
+---
+
+## ✅ Meta-Tx Flow Summary
+
+1. User signs a `send(token, to, amount, deadline, nonce)` message.
+2. `EntryPoint.relay()`:
+
+   * Deploys the vault if not deployed.
+   * Forwards call to `Vault.send()`.
+3. Vault:
+
+   * Verifies signature.
+   * Transfers tokens.
+   * Increments nonce.
+
+---
+
+## 📂 Repo Structure
+
+```
+contracts/
+  ├── Vault.sol
+  ├── VaultFactory.sol
+  └── EntryPoint.sol
+
+migrations/
+  ├── 1_initial_migration.js
+  └── 2_deploy_contracts.js
+
+scripts/
+  └── estimate.js
+
+build/ (auto-generated)
 ```
 
-## Testing
+---
 
-To test your contracts, you can run the following:
+## 🤠 Future Ideas
 
-```shell
-tronbox test --network <mainnet|shasta|nile|development>
-```
-
-## Work with EVM
-
-TronBox supports deploying contracts on EVM-compatible blockchains.
-
-For more information, please refer to: https://developers.tron.network/reference/work-with-evm
-
-## Additional Resources
-
-For further learning, visit the official TronBox site at https://tronbox.io
+* Relayer gas sponsorship rules
+* Signature batching
+* UI for vault interactions
+* GraphQL subgraph integration (TheGraph-style indexing)

@@ -11,8 +11,15 @@ interface ITRC20 {
 /// @title Deterministic Vault Contract
 /// @notice Ownable, constructor-locked TRC20 vault with meta-tx `send()` support
 contract Vault {
-    address public immutable owner;
-    uint256 public nonce;
+    address public immutable factory;
+
+    // keccak256("vault.proxy.owner")
+    uint256 private constant _OWNER_SLOT =
+        0x3cb08b44d5f655d2aa0e1b56ab7d6a137370c65380d7cc7a5a7b13ef2487b317;
+
+    // keccak256("vault.proxy.nonce")
+    uint256 private constant _NONCE_SLOT =
+        0xb6f7bff57e56cf4374dc9a470dff4292086e6c153ad51c03361db5d6db3e899d;
 
     event TokenSent(
         address indexed token,
@@ -24,12 +31,27 @@ contract Vault {
         uint256 nonce
     );
 
-    event VaultNonceIncremented(uint256 indexed nonce);
-
     /// @notice Initializes the vault with the owner's address and the USDT token
+    /// @param _factory Address of the factory that deployed the vault
+    constructor(address _factory) {
+        require(_factory != address(0), "impl: zero factory");
+        factory = _factory;
+    }
+
+    /// @notice Initializes the vault with the owner's address
     /// @param _owner Address that owns the vault and can authorize sends
-    constructor(address _owner) {
-        owner = _owner;
+    function initialize(address _owner) external {
+        require(msg.sender == factory, "only factory");
+        require(_loadOwner() == address(0), "already init");
+        _storeOwner(_owner);
+    }
+
+    function owner() external view returns (address) {
+        return _loadOwner();
+    }
+
+    function nonce() external view returns (uint256) {
+        return _loadNonce();
     }
 
     /// @notice Sends TRC20 from the vault to a recipient, authorized by an off-chain signature
@@ -56,12 +78,22 @@ contract Vault {
             require(feeRecipient != address(0), "Vault: invalid fee recipient");
         }
 
+        uint256 _nonce = _loadNonce();
+
         bytes32 messageHash = keccak256(
-            abi.encodePacked(token, to, amount, feeRecipient, fee, deadline, nonce)
+            abi.encodePacked(
+                token,
+                to,
+                amount,
+                feeRecipient,
+                fee,
+                deadline,
+                _nonce
+            )
         );
 
         address recovered = _recover(messageHash, sig);
-        require(recovered == owner, "Vault: invalid signature");
+        require(recovered == _loadOwner(), "Vault: invalid signature");
 
         uint256 netAmount = amount - fee;
         require(
@@ -76,10 +108,9 @@ contract Vault {
             );
         }
 
-        nonce++;
+        _storeNonce(_nonce + 1);
 
-        emit TokenSent(token, to, amount, feeRecipient, fee, deadline, nonce);
-        emit VaultNonceIncremented(nonce);
+        emit TokenSent(token, to, amount, feeRecipient, fee, deadline, _nonce);
     }
 
     /// @dev Recovers signer from the hash and signature
@@ -107,5 +138,27 @@ contract Vault {
         bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, _hash));
 
         return ecrecover(prefixedHash, v, r, s);
+    }
+
+    function _loadOwner() internal view returns (address a) {
+        assembly {
+            a := sload(_OWNER_SLOT)
+        }
+    }
+    function _storeOwner(address a) internal {
+        assembly {
+            sstore(_OWNER_SLOT, a)
+        }
+    }
+
+    function _loadNonce() internal view returns (uint256 n) {
+        assembly {
+            n := sload(_NONCE_SLOT)
+        }
+    }
+    function _storeNonce(uint256 n) internal {
+        assembly {
+            sstore(_NONCE_SLOT, n)
+        }
     }
 }

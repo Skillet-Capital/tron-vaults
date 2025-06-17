@@ -24,13 +24,6 @@ function toEthAddress(tronHex) {
   return "0x" + tronHex.slice(2); // strip the "41" prefix → 20-byte ETH address
 }
 
-function tronPrefixedMessage(messageHex) {
-  const raw = ethers.getBytes(messageHex);
-  const prefix = `\x19TRON Signed Message:\n${raw.length}`;
-  const fullMessage = ethers.toUtf8Bytes(prefix).concat(raw);
-  return ethers.keccak256(fullMessage);
-}
-
 contract("Vault", async (accounts) => {
   let token;
   let factory;
@@ -42,7 +35,12 @@ contract("Vault", async (accounts) => {
   before(async () => {
     [owner, feeRecipient, relayer] = accounts;
     token = await TRC20.new();
-    factory = await VaultFactory.new();
+
+    factory = await VaultFactory.new(); 
+    const implementation = await Vault.new(factory.address);
+
+    // set the implementation
+    await factory.setImplementation(implementation.address);
   });
 
   it("deploys a vault to the correct address and checks the owner", async () => {

@@ -6,23 +6,7 @@ const TRC20 = artifacts.require("TRC20");
 const Vault = artifacts.require("Vault");
 const VaultFactory = artifacts.require("VaultFactory");
 
-function getEpoch() {
-  return Math.floor(Date.now() / 1000);
-}
-
-function base58ToHexAddr(address) {
-  return TronWeb.address.toHex(address);
-}
-
-function toEthAddress(tronHex) {
-  if (tronHex.startsWith("0x")) {
-    tronHex = tronHex.slice(2);
-  }
-  if (!tronHex.startsWith("41")) {
-    throw new Error("Invalid TRON address prefix");
-  }
-  return "0x" + tronHex.slice(2); // strip the "41" prefix → 20-byte ETH address
-}
+const { computeVaultAddress, base58ToHexAddr, hexToBase58, toEthAddress, getEpoch } = require('../utils');
 
 contract("Vault", accounts => {
   let token;
@@ -35,27 +19,31 @@ contract("Vault", accounts => {
     [owner, feeRecipient, relayer] = accounts;
     token = await TRC20.new();
     console.log("Token deployed at:", token.address);
-    
+
     // Deploy factory and check implementation
     factory = await VaultFactory.new();
     console.log("Factory deployed at:", factory.address);
-    
+
     const implementation = await factory.implementation();
     console.log("Implementation address:", implementation);
-    
+
     // Check if implementation has code
     const implCode = await tronWeb.trx.getContract(implementation);
-    console.log("Implementation has code:", implCode ? "yes" : "no");
+    console.log("Implementation has code:", implCode ? true : false);
   });
 
-  it.only("deploys a vault to the correct address and checks the owner", async () => {
+  it("deploys a vault to the correct address and checks the owner", async () => {
     const computedAddress = await factory.computeAddress(owner);
-    console.log("Computed address:", computedAddress);
+    console.log("Computed address:", hexToBase58(computedAddress));
 
-    const preDeployed = await factory.isDeployed(owner);
-    console.log("Is deployed:", preDeployed);
-    assert.equal(preDeployed, false, "Vault is deployed");
-    
+    const syncCompute = computeVaultAddress(
+      toEthAddress(factory.address),
+      toEthAddress(await factory.implementation()),
+      toEthAddress(base58ToHexAddr(owner))
+    );
+
+    assert.equal(toEthAddress(computedAddress).toLowerCase(), syncCompute.toLowerCase(), "Computed address does not match");
+
     // deploy the vault and wait for it
     const deployTx = await factory.deploy(owner);
     console.log("Deployment tx:", deployTx.tx);
@@ -70,15 +58,15 @@ contract("Vault", accounts => {
     const code = await tronWeb.trx.getContract(computedAddress);
     console.log("Contract code at address:", code);
 
-    // // get the vault instance
-    // try {
-    //     const vault = await Vault.at(computedAddress);
-    //     console.log("Vault instance created successfully");
-    //     assert.equal(computedAddress, vault.address, "Vault is not the correct address");
-    // } catch (error) {
-    //     console.error("Error creating vault instance:", error);
-    //     throw error;
-    // }
+    // get the vault instance
+    try {
+        const vault = await Vault.at(computedAddress);
+        console.log("Vault instance created successfully");
+        assert.equal(computedAddress, vault.address, "Vault is not the correct address");
+    } catch (error) {
+        console.error("Error creating vault instance:", error);
+        throw error;
+    }
   });
 
   it("transfers TRC20 from the vault", async () => {

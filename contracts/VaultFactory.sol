@@ -24,7 +24,7 @@ contract VaultFactory {
     /// @notice Initializes the factory with the implementation address
     /// @dev The implementation is a Vault contract that is deployed with the factory address
     constructor() {
-        implementation = address(new Vault(msg.sender));
+        implementation = address(new Vault(address(this)));
     }
 
     /// @notice Deploys the caller’s current-nonce Vault
@@ -70,20 +70,25 @@ contract VaultFactory {
         return _computeAddress(owner, nonce);
     }
 
-    /// @notice True if the current-nonce Vault is already deployed
-    /// @param owner The vault owner
     function isDeployed(address owner) external view returns (bool) {
-        return _computeAddress(owner, nonces[owner]).code.length > 0;
+        return _isDeployed(_computeAddress(owner, nonces[owner]));
     }
 
-    /// @notice True if the given nonce Vault is already deployed
-    /// @param owner The vault owner
-    /// @param nonce The nonce
     function isDeployed(
         address owner,
         uint64 nonce
     ) external view returns (bool) {
-        return _computeAddress(owner, nonce).code.length > 0;
+        return _isDeployed(_computeAddress(owner, nonce));
+    }
+
+    /// @notice Returns true if a contract at `computedAddress` matches the expected proxy code
+/// @param computedAddress The address to check
+function isComputedDeployed(address computedAddress) external view returns (bool) {
+    return _isDeployed(computedAddress);
+}
+
+    function _isDeployed(address addr) internal view returns (bool) {
+        return addr.code.length > 0;
     }
 
     /// @notice Owner-signed nonce rotation
@@ -148,13 +153,11 @@ contract VaultFactory {
     function _minimalProxyInitCode(
         address logic
     ) internal pure returns (bytes memory) {
-        // on TRON `address` encodes to 21-bytes (0x41 +20) so we can
-        // use it directly after PUSH21
         return
             abi.encodePacked(
                 hex"3d602d80600a3d3981f3",
-                hex"363d3d373d3d3d363d74",
-                logic,
+                hex"363d3d373d3d3d363d73",
+                bytes20(logic),
                 hex"5af43d82803e903d91602b57fd5bf3"
             );
     }

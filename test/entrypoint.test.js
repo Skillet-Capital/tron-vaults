@@ -84,8 +84,6 @@ contract("EntryPoint", async (accounts) => {
       }
     );
 
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
     assert.equal(await token.balanceOf(vaultAddress), 0, "Vault Balance not transferred");
     assert.equal(await token.balanceOf(owner), BigInt(balance) - BigInt(fee), "Owner Balance not transferred");
     assert.equal(await token.balanceOf(feeRecipient), BigInt(fee), "Fee recipient balance not transferred");

@@ -48,7 +48,7 @@ contract EntryPoint {
         if (!factory.isDeployed(owner)) factory.deploy(owner);
 
         // Forward the call
-        address vaultAddress = factory.userVault(owner);
+        address vaultAddress = factory.computeAddress(owner);
         Vault vault = Vault(vaultAddress);
 
         vault.send(token, to, amount, feeRecipient, fee, deadline, sig);

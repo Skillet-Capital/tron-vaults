@@ -16,33 +16,28 @@ const bytecode = artifact.bytecode;
 // Ensure bytecode starts without '0x'
 const cleanBytecode = bytecode.startsWith('0x') ? bytecode.slice(2) : bytecode;
 
-// Method 1: Estimate using transaction simulation
+// Method 1: Create deployment transaction
 async function estimateDeploymentEnergySimulation() {
   try {
-    console.log('=== Method 1: Transaction Simulation ===');
+    console.log('=== Method 1: Deployment Transaction Creation ===');
     
-    // Create the deployment transaction
+    // Create the deployment transaction with adjusted parameters
     const tx = await tronWeb.transactionBuilder.createSmartContract({
       abi,
       bytecode: cleanBytecode,
-      feeLimit: 100_000_000, // Increased fee limit
+      feeLimit: 100_000_000,  // 100 TRX
       callValue: 0,
       userFeePercentage: 100,
-      originEnergyLimit: 50_000_000 // Increased origin energy limit
+      originEnergyLimit: 1_000_000  // Increased from 50M to 1M
     }, tronWeb.defaultAddress.base58);
 
-    // Try to estimate energy - note this method has limitations
-    try {
-      const estimate = await tronWeb.transactionBuilder.estimateEnergy(tx);
-      console.log('Estimated Energy (simulation):', estimate);
-    } catch (estimateErr) {
-      console.log('Direct estimation failed:', estimateErr.message);
-      console.log('This is expected for contract deployments');
-    }
-
+    console.log('Deployment transaction created:');
+    console.log('- Fee Limit:', tx.raw_data.contract[0].parameter.value.fee_limit);
+    console.log('- Origin Energy Limit:', tx.raw_data.contract[0].parameter.value.origin_energy_limit);
+    
     return tx;
   } catch (err) {
-    console.error('Error in simulation method:', err.message);
+    console.error('Error in deployment transaction creation:', err.message);
     return null;
   }
 }

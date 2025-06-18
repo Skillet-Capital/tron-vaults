@@ -21,6 +21,10 @@ contract Vault {
     uint256 private constant _NONCE_SLOT =
         0xb6f7bff57e56cf4374dc9a470dff4292086e6c153ad51c03361db5d6db3e899d;
 
+    // keccak256("vault.proxy.reentrancy") => avoid collision with future vars
+    uint256 private constant _REENTRANCY_LOCK_SLOT =
+        0x0f3e2c215f3aa78a86d67e9e27415c9c8c6a5d4890caa013ac10b46ab4e7f8e1;
+
     event TokenSent(
         address indexed token,
         address indexed to,
@@ -70,7 +74,7 @@ contract Vault {
         uint256 fee,
         uint256 deadline,
         bytes calldata sig
-    ) external {
+    ) external nonReentrant {
         require(block.timestamp < deadline, "Vault: deadline exceeded");
         require(fee <= amount, "Vault: fee exceeds amount");
 
@@ -95,6 +99,8 @@ contract Vault {
         address recovered = _recover(messageHash, sig);
         require(recovered == _loadOwner(), "Vault: invalid signature");
 
+        _storeNonce(_nonce + 1);
+
         uint256 netAmount = amount - fee;
         require(
             ITRC20(token).transfer(to, netAmount),
@@ -107,8 +113,6 @@ contract Vault {
                 "Vault: Token transfer failed"
             );
         }
-
-        _storeNonce(_nonce + 1);
 
         emit TokenSent(token, to, amount, feeRecipient, fee, deadline, _nonce);
     }
@@ -134,6 +138,12 @@ contract Vault {
         if (v < 27) v += 27;
         require(v == 27 || v == 28, "Vault: invalid v");
 
+        require(
+            uint256(s) <=
+                0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0,
+            "Vault: invalid s"
+        );
+
         bytes memory prefix = "\x19TRON Signed Message:\n32";
         bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, _hash));
 
@@ -156,9 +166,29 @@ contract Vault {
             n := sload(_NONCE_SLOT)
         }
     }
+
     function _storeNonce(uint256 n) internal {
         assembly {
             sstore(_NONCE_SLOT, n)
         }
+    }
+
+    function _loadLock() internal view returns (uint256 l) {
+        assembly {
+            l := sload(_REENTRANCY_LOCK_SLOT)
+        }
+    }
+
+    function _storeLock(uint256 l) internal {
+        assembly {
+            sstore(_REENTRANCY_LOCK_SLOT, l)
+        }
+    }
+
+    modifier nonReentrant() {
+        require(_loadLock() == 0, "Vault: reentrant");
+        _storeLock(1);
+        _;
+        _storeLock(0);
     }
 }

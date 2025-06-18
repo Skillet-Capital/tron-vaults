@@ -29,7 +29,7 @@ module.exports = {
     },
     nile: {
       // Obtain test coin at https://nileex.io/join/getJoinPage
-      privateKey: process.env.PRIVATE_KEY_NILE,
+      privateKey: process.env.PRIVATE_KEY_MAINNET,
       userFeePercentage: 100,
       feeLimit: 1000 * 1e6,
       fullHost: 'https://nile.trongrid.io',

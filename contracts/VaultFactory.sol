@@ -15,6 +15,7 @@ contract VaultFactory {
         uint64 indexed nonce,
         address vault
     );
+
     event VaultNonceIncremented(
         address indexed owner,
         uint64 indexed oldNonce,
@@ -82,10 +83,12 @@ contract VaultFactory {
     }
 
     /// @notice Returns true if a contract at `computedAddress` matches the expected proxy code
-/// @param computedAddress The address to check
-function isComputedDeployed(address computedAddress) external view returns (bool) {
-    return _isDeployed(computedAddress);
-}
+    /// @param computedAddress The address to check
+    function isComputedDeployed(
+        address computedAddress
+    ) external view returns (bool) {
+        return _isDeployed(computedAddress);
+    }
 
     function _isDeployed(address addr) internal view returns (bool) {
         return addr.code.length > 0;
@@ -93,7 +96,7 @@ function isComputedDeployed(address computedAddress) external view returns (bool
 
     /// @notice Owner-signed nonce rotation
     /// @param owner The vault owner
-    /// @param sig Owner’s signature over keccak256("VaultNonce", owner, newNonce)
+    /// @param sig Owner’s signature over keccak256("VaultNonce", owner, currentNonce)
     function incrementNonce(address owner, bytes calldata sig) external {
         uint64 oldNonce = nonces[owner];
         bytes32 _hash = keccak256(
@@ -176,6 +179,12 @@ function isComputedDeployed(address computedAddress) external view returns (bool
         }
         if (v < 27) v += 27;
         require(v == 27 || v == 28, "Vault Factory: invalid v");
+
+        require(
+            uint256(s) <=
+                0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0,
+            "Vault Factory: invalid s"
+        );
 
         bytes memory prefix = "\x19TRON Signed Message:\n32";
         bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, _hash));

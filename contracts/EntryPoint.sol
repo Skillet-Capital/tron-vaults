@@ -7,17 +7,17 @@ import {VaultFactory} from "./VaultFactory.sol";
 /// @title EntryPoint
 /// @notice A relayer contract that deploys vaults and forwards meta-transactions
 contract EntryPoint {
-    VaultFactory public factory;
+    VaultFactory public immutable factory;
 
     event MetaTransactionExecuted(
-        address indexed relayer, 
-        address indexed owner, 
-        address vault, 
-        address token, 
-        address to, 
-        uint256 amount, 
-        address feeRecipient, 
-        uint256 fee, 
+        address indexed relayer,
+        address indexed owner,
+        address vault,
+        address token,
+        address to,
+        uint256 amount,
+        address feeRecipient,
+        uint256 fee,
         uint256 deadline
     );
 
@@ -45,7 +45,11 @@ contract EntryPoint {
         uint256 deadline,
         bytes calldata sig
     ) external {
-        if (!factory.isDeployed(owner)) factory.deploy(owner);
+        try factory.deploy(owner) {
+            // Vault freshly deployed — nothing more needed
+        } catch {
+            // Vault already deployed — that's fine, continue
+        }
 
         // Forward the call
         address vaultAddress = factory.computeAddress(owner);
@@ -53,6 +57,16 @@ contract EntryPoint {
 
         vault.send(token, to, amount, feeRecipient, fee, deadline, sig);
 
-        emit MetaTransactionExecuted(msg.sender, owner, vaultAddress, token, to, amount, feeRecipient, fee, deadline);
+        emit MetaTransactionExecuted(
+            msg.sender,
+            owner,
+            vaultAddress,
+            token,
+            to,
+            amount,
+            feeRecipient,
+            fee,
+            deadline
+        );
     }
 }

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Vault} from "./Vault.sol";
+
 /// @title VaultFactory
 /// @notice Factory for deploying Vault contracts using CREATE2
 contract VaultFactory {
-    address public implementation;
-    bool private implementationSet;
-    address public immutable deployer;
+    address public immutable implementation;
 
     mapping(address => uint64) public nonces;
-    mapping(address => mapping(uint64 => address)) public vaults;
 
     event VaultDeployed(
         address indexed owner,
@@ -22,25 +21,22 @@ contract VaultFactory {
         uint64 newNonce
     );
 
+    /// @notice Initializes the factory with the implementation address
+    /// @dev The implementation is a Vault contract that is deployed with the factory address
     constructor() {
-        deployer = msg.sender;
-    }
-
-    function setImplementation(address _impl) external onlyDeployer onlyOnce {
-        require(_impl != address(0), "VaultFactory: zero implementation");
-        implementation = _impl;
-        implementationSet = true;
+        implementation = address(new Vault(msg.sender));
     }
 
     /// @notice Deploys the caller’s current-nonce Vault
     /// @param owner The vault owner
     /// @return vault The deployed Vault address
     function deploy(address owner) external returns (address vault) {
-        require(implementationSet, "VaultFactory: implementation not set");
+        require(owner != address(0), "Vault Factory: zero owner");
+
         uint64 nonce = nonces[owner];
         bytes32 salt = keccak256(abi.encode(owner, nonce));
 
-        address computedAddress = _computeAddress(owner);
+        address computedAddress = _computeAddress(owner, nonce);
         require(
             computedAddress.code.length == 0,
             "Vault Factory: vault already deployed"
@@ -55,29 +51,39 @@ contract VaultFactory {
         );
         require(ok, "VaultFactory: failed to initialize");
 
-        vaults[owner][nonce] = vault;
-
         emit VaultDeployed(owner, nonce, vault);
     }
 
-    function userVault(address owner) external view returns (address) {
-        return vaults[owner][nonces[owner]];
+    /// @notice Computes the deterministic Vault address for the owner's current nonce
+    /// @param owner The vault owner
+    function computeAddress(address owner) external view returns (address) {
+        return _computeAddress(owner, nonces[owner]);
     }
 
-    function userVault(
+    /// @notice Computes the deterministic Vault address for the given nonce
+    /// @param owner The vault owner
+    /// @param nonce The nonce
+    function computeAddress(
         address owner,
         uint64 nonce
     ) external view returns (address) {
-        return vaults[owner][nonce];
-    }
-
-    function computeAddress(address owner) external view returns (address) {
-        return _computeAddress(owner);
+        return _computeAddress(owner, nonce);
     }
 
     /// @notice True if the current-nonce Vault is already deployed
+    /// @param owner The vault owner
     function isDeployed(address owner) external view returns (bool) {
-        return _computeAddress(owner).code.length > 0;
+        return _computeAddress(owner, nonces[owner]).code.length > 0;
+    }
+
+    /// @notice True if the given nonce Vault is already deployed
+    /// @param owner The vault owner
+    /// @param nonce The nonce
+    function isDeployed(
+        address owner,
+        uint64 nonce
+    ) external view returns (bool) {
+        return _computeAddress(owner, nonce).code.length > 0;
     }
 
     /// @notice Owner-signed nonce rotation
@@ -99,21 +105,25 @@ contract VaultFactory {
 
     /* ---------- Internal helpers ---------- */
 
-    /// @notice Returns the minimal proxy init code for the given logic contract
-    /// @dev https://eips.ethereum.org/EIPS/eip-1167
-    /// @dev https://github.com/optionality/clone-factory
-    /// @param logic The logic contract address
-    /// @return The minimal proxy init code
-    function _minimalProxyInitCode(
-        address logic
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                hex"3d602d80600a3d3981f3",
-                hex"363d3d373d3d3d363d73",
-                logic,
-                hex"5af43d82803e903d91602b57fd5bf3"
-            );
+    /// @notice Computes the deterministic Vault address for the caller’s current nonce
+    /// @param owner The vault owner
+    function _computeAddress(
+        address owner,
+        uint64 nonce
+    ) internal view returns (address) {
+        bytes32 salt = keccak256(abi.encode(owner, nonce));
+        bytes32 codeHash = keccak256(_minimalProxyInitCode(implementation));
+        return _computeCreate2Address(salt, codeHash);
+    }
+
+    function _computeCreate2Address(
+        bytes32 salt,
+        bytes32 codeHash
+    ) internal view returns (address) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(bytes1(0x41), address(this), salt, codeHash)
+        );
+        return address(uint160(uint256(digest)));
     }
 
     function _create2(
@@ -130,24 +140,23 @@ contract VaultFactory {
         }
     }
 
-    /// @notice Computes the deterministic Vault address for the caller’s current nonce
-    /// @param owner The vault owner
-    function _computeAddress(address owner) internal view returns (address) {
-        require(implementationSet, "VaultFactory: implementation not set");
-        uint64 nonce = nonces[owner];
-        bytes32 salt = keccak256(abi.encode(owner, nonce));
-        bytes32 codeHash = keccak256(_minimalProxyInitCode(implementation));
-        return _computeCreate2Address(salt, codeHash);
-    }
-
-    function _computeCreate2Address(
-        bytes32 salt,
-        bytes32 codeHash
-    ) internal view returns (address) {
-        bytes32 digest = keccak256(
-            abi.encodePacked(bytes1(0x41), address(this), salt, codeHash)
-        );
-        return address(uint160(uint256(digest)));
+    /// @notice Returns the minimal proxy init code for the given logic contract
+    /// @dev https://eips.ethereum.org/EIPS/eip-1167
+    /// @dev https://github.com/optionality/clone-factory
+    /// @param logic The logic contract address
+    /// @return The minimal proxy init code
+    function _minimalProxyInitCode(
+        address logic
+    ) internal pure returns (bytes memory) {
+        // on TRON `address` encodes to 21-bytes (0x41 +20) so we can
+        // use it directly after PUSH21
+        return
+            abi.encodePacked(
+                hex"3d602d80600a3d3981f3",
+                hex"363d3d373d3d3d363d74",
+                logic,
+                hex"5af43d82803e903d91602b57fd5bf3"
+            );
     }
 
     function _recover(
@@ -169,15 +178,5 @@ contract VaultFactory {
         bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, _hash));
 
         return ecrecover(prefixedHash, v, r, s);
-    }
-
-    modifier onlyOnce() {
-        require(!implementationSet, "VaultFactory: already set");
-        _;
-    }
-
-    modifier onlyDeployer() {
-        require(msg.sender == deployer, "VaultFactory: not deployer");
-        _;
     }
 }

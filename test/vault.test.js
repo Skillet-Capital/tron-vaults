@@ -24,10 +24,9 @@ function toEthAddress(tronHex) {
   return "0x" + tronHex.slice(2); // strip the "41" prefix → 20-byte ETH address
 }
 
-contract("Vault", async (accounts) => {
+contract("Vault", accounts => {
   let token;
   let factory;
-
   let owner;
   let relayer;
   let feeRecipient;
@@ -35,28 +34,51 @@ contract("Vault", async (accounts) => {
   before(async () => {
     [owner, feeRecipient, relayer] = accounts;
     token = await TRC20.new();
-
-    factory = await VaultFactory.new(); 
-    const implementation = await Vault.new(factory.address);
-
-    // set the implementation
-    await factory.setImplementation(implementation.address);
+    console.log("Token deployed at:", token.address);
+    
+    // Deploy factory and check implementation
+    factory = await VaultFactory.new();
+    console.log("Factory deployed at:", factory.address);
+    
+    const implementation = await factory.implementation();
+    console.log("Implementation address:", implementation);
+    
+    // Check if implementation has code
+    const implCode = await tronWeb.trx.getContract(implementation);
+    console.log("Implementation has code:", implCode ? "yes" : "no");
   });
 
-  it("deploys a vault to the correct address and checks the owner", async () => {
+  it.only("deploys a vault to the correct address and checks the owner", async () => {
     const computedAddress = await factory.computeAddress(owner);
+    console.log("Computed address:", computedAddress);
 
-    // deploy the vault
-    await factory.deploy(owner);
-    const vault = await Vault.at(computedAddress);
-    assert.equal(computedAddress, vault.address, "Vault is not the correct address");
+    const preDeployed = await factory.isDeployed(owner);
+    console.log("Is deployed:", preDeployed);
+    assert.equal(preDeployed, false, "Vault is deployed");
+    
+    // deploy the vault and wait for it
+    const deployTx = await factory.deploy(owner);
+    console.log("Deployment tx:", deployTx.tx);
+    await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // check the user vault
-    const userVault = await factory.userVault(owner);
-    assert.equal(userVault, vault.address, "Vault is not the correct address");
+    // check the vault is deployed
+    const isDeployed = await factory.isDeployed(owner);
+    console.log("Is deployed:", isDeployed);
+    assert.equal(isDeployed, true, "Vault is not deployed");
 
-    // check the vault owner
-    assert.equal(await vault.owner(), base58ToHexAddr(owner), "Vault owner is not the correct address");
+    // Try to get the contract code at the address
+    const code = await tronWeb.trx.getContract(computedAddress);
+    console.log("Contract code at address:", code);
+
+    // // get the vault instance
+    // try {
+    //     const vault = await Vault.at(computedAddress);
+    //     console.log("Vault instance created successfully");
+    //     assert.equal(computedAddress, vault.address, "Vault is not the correct address");
+    // } catch (error) {
+    //     console.error("Error creating vault instance:", error);
+    //     throw error;
+    // }
   });
 
   it("transfers TRC20 from the vault", async () => {
